@@ -65,3 +65,21 @@ class Atom:
             if val > 255 or val < 0:
                 raise ValueError
         self._colour = rgb
+
+
+class Link:
+    a1: Atom
+    a2: Atom
+    target_dist: float
+
+    def __init__(self, a1: Atom, a2: Atom):
+        self.a1 = a1
+        self.a2 = a2
+
+    def apply(self):
+        axis = self.a1.pos - self.a2.pos
+        dist = axis.magnitude()
+        axis.scale(1 / dist)
+        delta = self.target_dist - dist
+        self.a1.pos += delta / 2 * axis
+        self.a2.pos -= delta / 2 * axis

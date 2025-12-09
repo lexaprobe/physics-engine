@@ -1,7 +1,8 @@
 from atom import Atom
+from vector import Vector
 
 
-class PhysicsEnvironment:
+class PhysicsBox:
     """
     Define the physical laws for a PhysicsEngine.
     """
@@ -92,8 +93,33 @@ class PhysicsEnvironment:
     def set_gravity(self, gravity: tuple[float, float]):
         self._gravity = gravity
 
+
+class PhysicsCircle(PhysicsBox):
+    _radius: float
+
+    def __init__(self, size: tuple[float, float], radius: float):
+        super().__init__(size)
+        if radius > self._height / 2 or radius > self._width / 2:
+            raise TypeError("radius value too large for environment size")
+        self._radius = radius
+
+    def centre(self) -> Vector:
+        return Vector((self._width / 2, self._height / 2))
+
     def radius(self) -> float:
-        if self._height < self._width:
-            return self._height / 2
-        else:
-            return self._width / 2
+        return self._radius
+
+    def in_bounds(self, pos: tuple[float, float], radius: float) -> bool:
+        origin = Vector(pos) - self.centre()
+        if origin.magnitude() > self._radius - radius:
+            return False
+        return True
+
+    def apply_constraint(self):
+        centre = self.centre()
+        for atom in self._atoms:
+            to_atom = atom.pos - centre
+            dist = to_atom.magnitude()
+            if dist > self._radius - atom.radius():
+                to_atom.scale(1 / dist)
+                atom.pos = centre + (to_atom * (self._radius - atom.radius()))
