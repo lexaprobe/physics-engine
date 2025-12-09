@@ -10,7 +10,7 @@ class PhysicsEnvironment:
     _height: float
     _atoms: list[Atom]
     _gravity = (0.0, 500.0)
-    _damping = 1
+    _damping = 0.9
 
     def __init__(self, size: tuple[float, float]):
         self._width, self._height = size
@@ -69,23 +69,24 @@ class PhysicsEnvironment:
                 continue
             x, y, r = atom.pos.x, atom.pos.y, atom.radius()
             if x + r > self._width:
-                atom.pos.set((self._width - r, y))
                 vel = atom.velocity()
+                atom.pos.set((self._width - r, y))
                 vel.x *= -self._damping
                 atom.prev_pos = atom.pos - vel
             elif x - r < 0:
-                atom.pos.set((r, y))
                 vel = atom.velocity()
+                atom.pos.set((r, y))
                 vel.x *= -self._damping
                 atom.prev_pos = atom.pos - vel
-            elif y + r > self._height:
-                atom.pos.set((x, self._height - r))
+            # handle collision axes independently
+            if y + r > self._height:
                 vel = atom.velocity()
+                atom.pos.set((x, self._height - r))
                 vel.y *= -self._damping
                 atom.prev_pos = atom.pos - vel
             elif y - r < 0:
-                atom.pos.set((x, r))
                 vel = atom.velocity()
+                atom.pos.set((x, r))
                 vel.y *= -self._damping
                 atom.prev_pos = atom.pos - vel
 
