@@ -78,7 +78,6 @@ class PhysicsEnvironment:
                 atom.pos.set((r, y))
                 vel.x *= -self._damping
                 atom.prev_pos = atom.pos - vel
-            # handle collision axes independently
             if y + r > self._height:
                 vel = atom.velocity()
                 atom.pos.set((x, self._height - r))
@@ -92,3 +91,9 @@ class PhysicsEnvironment:
 
     def set_gravity(self, gravity: tuple[float, float]):
         self._gravity = gravity
+
+    def radius(self) -> float:
+        if self._height < self._width:
+            return self._height / 2
+        else:
+            return self._width / 2

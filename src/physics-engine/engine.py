@@ -1,4 +1,5 @@
 import colorsys
+import math
 import random
 import sys
 from typing import Any
@@ -6,78 +7,6 @@ from typing import Any
 import pygame
 from atom import Atom
 from environment import PhysicsEnvironment
-
-
-def main():
-    """
-    Program Flags:
-    1. None (default)
-        - click to spawn objects
-        - no colour variation
-        - rectangular environment
-    2. Colour Objects (-c)
-        - cycle through colours when spawning objects
-    3. Auto Mode (-a N)
-        - automatically spawn N objects (1 per frame)
-        - manual spawning is turned off
-    4. Set Radius (-r N)
-        - compatible with manual or auto mode
-        - sets the default radius of an object
-    5. Set V-Max (-v N)
-        - set maximum object speed in simulation
-    6. Set Spawn Velocity (-s X Y)
-        - set the velocity with which objects are spawned
-        - this will be unchanging
-        - i.e. '-s 0 100' to send objects straight down
-    7. Random Radii (-R)
-        - each object will spawn with a random radius
-        - will be ±10 from the default radius
-    8. Circular Environment (-C)
-        - physics environment will be circular
-    """
-    engine = Engine((800, 800), fps=120)
-    for i in range(1, len(sys.argv)):
-        match sys.argv[i]:
-            case "-c":
-                engine.change_colours(True)
-            case "-a":
-                limit = _check_next_arg(i, "auto", "int")
-                engine.auto_spawn(True)
-                engine.set_obj_limit(limit)
-            case "-r":
-                radius = _check_next_arg(i, "radius", "float")
-                engine.set_default_radius(radius)
-            case "-v":
-                vel = _check_next_arg(i, "v-max", "int")
-                engine.set_vmax(vel)
-            case "-s":
-                x_vel = _check_next_arg(i, "spawn velocity", "float")
-                y_vel = _check_next_arg(i + 1, "spawn velocity", "float")
-                engine.constrain_velocity((x_vel, y_vel))
-    engine.simulate()
-
-
-def _check_next_arg(index: int, flag: str, type: str) -> Any:
-    if index + 1 >= len(sys.argv):
-        print(f"Error: value expected for flag '{flag}'", file=sys.stderr)
-        sys.exit(1)
-    try:
-        value: Any
-        match type:
-            case "int":
-                value = int(sys.argv[index + 1])
-            case "float":
-                value = float(sys.argv[index + 1])
-            case _:
-                raise TypeError(
-                    "Invalid argument for 'type'\nExpected 'float' or 'int'"
-                )
-        if value < 0:
-            raise ValueError
-    except ValueError:
-        print(f"Error: invalid value '{value}' for flag '{flag}'", file=sys.stderr)
-        sys.exit(1)
-    return value
 
 
 class Engine:
@@ -91,13 +20,15 @@ class Engine:
     obj_limit: int | None
     auto: bool = False
     cycle_colours: bool = False
+    random_radius: bool = False
     constant_velocity: bool = False
 
     # private attributes
     _env: PhysicsEnvironment
     _obj_hue = 0
+    _spawn_angle = 0
     _vmax: int = 500
-    _default_radius: float = 10
+    _default_radius: float = 15
     _default_velocity: tuple[float, float]
 
     def __init__(
@@ -114,34 +45,50 @@ class Engine:
 
     def simulate(self, caption: str = "Physics Engine"):
         pygame.init()
+        pygame.font.init()
+        font = pygame.font.SysFont("Arial", 18)
         window = pygame.display.set_mode(self.window_size())
         pygame.display.set_caption(caption)
         clock = pygame.time.Clock()
         self._env = PhysicsEnvironment(self.window_size())
         obj_count = 0
-        frame_count = 0
+        frames = 0
+        pause = False
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     return
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if self._manual_valid(obj_count):
+                    if self._manual_valid(obj_count, pause):
                         coords = pygame.mouse.get_pos()
-                        self.spawn_object(coords, self._default_radius)
+                        self.spawn_object(coords, self.get_object_radius())
                         obj_count += 1
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_c:
                         self._env.clear()
-            if self._auto_valid(obj_count, frame_count):
-                self.spawn_object(self.centre(), self._default_radius)
+                        obj_count = 0
+                    elif event.key == pygame.K_p:
+                        pause = not pause
+                        continue
+            if self._auto_valid(obj_count, frames, pause):
+                self.spawn_object(self.centre(), self.get_object_radius())
                 obj_count += 1
-            self._env.update(1 / self.fps, sub_steps=2)
+            if not pause:
+                self._env.update(1 / self.fps, sub_steps=2)
             window.fill(self.win_colour)
             self.draw_objects(window)
+            fps = f"FPS: {int(clock.get_fps())}"
+            fps_text = font.render(fps, 1, pygame.Color("WHITE"))
+            obj_text = font.render(f"Objects: {obj_count}", 1, pygame.Color("WHITE"))
+            window.blit(fps_text, (6, 5))
+            window.blit(obj_text, (95, 5))
+            if pause:
+                pause_text = font.render("PAUSED", 1, pygame.Color("WHITE"))
+                window.blit(pause_text, (self.win_width - 78, 5))
             pygame.display.update()
             clock.tick(self.fps)
-            frame_count += 1
+            frames += 1
 
     def spawn_object(
         self,
@@ -197,6 +144,9 @@ class Engine:
     def change_colours(self, cycle: bool):
         self.cycle_colours = cycle
 
+    def random_obj_radius(self, random: bool):
+        self.random_radius = random
+
     def set_default_radius(self, value: float):
         self._default_radius = value
 
@@ -215,15 +165,99 @@ class Engine:
         y = random.randint(-maximum, maximum)
         return (x, y)
 
-    def _auto_valid(self, obj_count: int, frame_count: int) -> bool:
+    def get_object_radius(self) -> float:
+        if self.random_radius:
+            r = int(self._default_radius * 100)
+            return random.randint(r - 1000, r + 1000) / 100
+        else:
+            return self._default_radius
+
+    def _auto_valid(self, obj_count: int, frames: int, pause: bool) -> bool:
         return (
-            self.auto
+            not pause
+            and self.auto
             and (self.obj_limit is None or obj_count < self.obj_limit)
-            and frame_count % 10 == 0
+            and frames % 24 == 0
         )
 
-    def _manual_valid(self, obj_count: int) -> bool:
-        return not self.auto and (self.obj_limit is None or obj_count < self.obj_limit)
+    def _manual_valid(self, obj_count: int, pause: bool) -> bool:
+        return (
+            not pause
+            and not self.auto
+            and (self.obj_limit is None or obj_count < self.obj_limit)
+        )
+
+
+def main():
+    """
+    Program Flags:\n
+    None (default)
+        - click to spawn objects
+        - no colour variation
+        - rectangular environment
+    Colour Objects (-c)
+        - cycle through colours when spawning objects
+    Auto Mode (-a N)
+        - automatically spawn N objects (1 per frame)
+        - manual spawning is turned off
+    Set Radius (-r N)
+        - compatible with manual or auto mode
+        - sets the default radius of an object
+    Set V-Max (-v N)
+        - set maximum object speed in simulation
+    Set Spawn Velocity (-s X Y)
+        - set the velocity with which objects are spawned
+        - this will be unchanging
+        - i.e. '-s 0 100' to send objects straight down
+    Random Radii (-R)
+        - each object will spawn with a random radius
+        - will be ±10 from the default radius
+    """
+    engine = Engine((800, 800), fps=120)
+    for i in range(1, len(sys.argv)):
+        match sys.argv[i]:
+            case "-c":
+                engine.change_colours(True)
+            case "-a":
+                limit = _check_next_arg(i, "auto", "int")
+                engine.auto_spawn(True)
+                engine.set_obj_limit(limit)
+            case "-r":
+                radius = _check_next_arg(i, "radius", "float")
+                engine.set_default_radius(radius)
+            case "-v":
+                vel = _check_next_arg(i, "v-max", "int")
+                engine.set_vmax(vel)
+            case "-s":
+                x_vel = _check_next_arg(i, "spawn velocity", "float")
+                y_vel = _check_next_arg(i + 1, "spawn velocity", "float")
+                engine.constrain_velocity((x_vel, y_vel))
+            case "-R":
+                engine.random_obj_radius(True)
+    engine.simulate()
+
+
+def _check_next_arg(index: int, flag: str, type: str) -> Any:
+    if index + 1 >= len(sys.argv):
+        print(f"Error: value expected for flag '{flag}'", file=sys.stderr)
+        sys.exit(1)
+    try:
+        value: Any
+        match type:
+            case "int":
+                value = int(sys.argv[index + 1])
+            case "float":
+                value = float(sys.argv[index + 1])
+            case _:
+                raise TypeError(
+                    "Invalid argument for 'type'\nExpected 'float' or 'int'"
+                )
+        if value < 0:
+            raise ValueError
+    except ValueError:
+        print(f"Error: invalid value '{value}' for flag '{flag}'", file=sys.stderr)
+        sys.exit(1)
+    return value
 
 
 if __name__ == "__main__":

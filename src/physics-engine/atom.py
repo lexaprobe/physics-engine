@@ -30,7 +30,6 @@ class Atom:
         vel = self.velocity()
         self.prev_pos = self.pos.copy()
         self.pos = self.pos + vel + self._force * dt * dt
-        # self.apply_force((0, 0))
 
     def apply_force(self, values: tuple[float, float]):
         self._force.set(values)
