@@ -95,8 +95,16 @@ class Engine:
                 window.fill(self.win_colour)
             self.draw_objects(window)
             fps = f"FPS: {int(clock.get_fps())}"
-            fps_text = font.render(fps, 1, pygame.Color("BLACK"))
-            obj_text = font.render(f"Objects: {obj_count}", 1, pygame.Color("BLACK"))
+            if self.circular_env:
+                fps_text = font.render(fps, 1, pygame.Color("BLACK"))
+                obj_text = font.render(
+                    f"Objects: {obj_count}", 1, pygame.Color("BLACK")
+                )
+            else:
+                fps_text = font.render(fps, 1, pygame.Color("WHITE"))
+                obj_text = font.render(
+                    f"Objects: {obj_count}", 1, pygame.Color("WHITE")
+                )
             window.blit(fps_text, (6, 5))
             window.blit(obj_text, (95, 5))
             if pause:
